@@ -16,7 +16,8 @@ pipeline {
 
     stage('Test Results') {
       steps {
-        testng 'test-output/testng-results.xml'
+        junit '**/test-output/testng-results.xml'
+
       }
     }
   }
