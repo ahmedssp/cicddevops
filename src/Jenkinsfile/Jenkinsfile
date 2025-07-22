@@ -1,74 +1,72 @@
 pipeline {
     agent any
     environment {
-        // Define environment variables
-        MAVEN_HOME = tool 'Maven' // Ensure Maven is configured in Jenkins
-        JAVA_HOME = tool 'JDK11'  // Ensure JDK11 is configured in Jenkins
-        DOCKER_REGISTRY = 'mycompany.jfrog.io/myapp' // Replace with your Docker registry
-        DOCKER_CREDENTIALS = credentials('docker-registry-credentials') // Jenkins credentials ID
-        SONARQUBE_SERVER = 'sonarqube' // SonarQube server name in Jenkins
-        STAGING_SERVER = 'staging@my-staging-server.com' // Replace with staging server details
-        PRODUCTION_SERVER = 'prod@my-prod-server.com' // Replace with production server details
+        // Use exact paths as per your system
+        JAVA_HOME = 'C:\\Program Files\\Java\\jdk-17'
+        MAVEN_HOME = 'C:\\Program Files\\Java\\apache-maven-3.9.9'
+
+        // Jenkins tool names (override these in Jenkins if using Jenkins tools)
+        // JAVA_HOME = tool 'JDK17'
+        // MAVEN_HOME = tool 'Maven_3.9.9'
+
+        DOCKER_REGISTRY = 'mycompany.jfrog.io/myapp'
+        DOCKER_CREDENTIALS = credentials('docker-registry-credentials')
+        SONARQUBE_SERVER = 'sonarqube' // Must match Jenkins Sonar server config
+        STAGING_SERVER = 'staging@my-staging-server.com'
+        PRODUCTION_SERVER = 'prod@my-prod-server.com'
     }
     triggers {
-        // Trigger on code push or pull request
-        pollSCM('H/5 * * * *') // Poll SCM every 5 minutes
+        pollSCM('H/5 * * * *')
     }
     stages {
         stage('Checkout') {
             steps {
-                // Checkout code from VCS
                 checkout scm
             }
         }
         stage('Build') {
             steps {
-                // Compile and package the Spring Boot application
-                sh "${MAVEN_HOME}/bin/mvn clean package -DskipTests"
+                sh "\"${MAVEN_HOME}\\bin\\mvn\" clean package -DskipTests"
             }
         }
         stage('Unit Tests') {
             steps {
-                // Run JUnit tests
-                sh "${MAVEN_HOME}/bin/mvn test"
+                sh "\"${MAVEN_HOME}\\bin\\mvn\" test"
             }
             post {
                 always {
-                    // Archive test results
                     junit '**/target/surefire-reports/*.xml'
                 }
             }
         }
         stage('Static Analysis') {
             steps {
-                // Run SonarQube analysis
                 withSonarQubeEnv("${SONARQUBE_SERVER}") {
-                    sh "${MAVEN_HOME}/bin/mvn sonar:sonar"
+                    // If using SonarScanner CLI (as per your system)
+                    sh 'sonar-scanner'
+                    // OR if you still use Maven plugin
+                    // sh "\"${MAVEN_HOME}\\bin\\mvn\" sonar:sonar"
                 }
             }
         }
         stage('Integration Tests') {
             steps {
-                // Run integration tests
-                sh "${MAVEN_HOME}/bin/mvn verify -Pintegration-test"
+                sh "\"${MAVEN_HOME}\\bin\\mvn\" verify -Pintegration-test"
             }
             post {
                 always {
-                    // Archive integration test results
                     junit '**/target/failsafe-reports/*.xml'
                 }
             }
         }
         stage('Build Docker Image') {
             steps {
-                // Build and tag Docker image
                 sh "docker build -t ${DOCKER_REGISTRY}:latest ."
                 sh "docker tag ${DOCKER_REGISTRY}:latest ${DOCKER_REGISTRY}:${env.BUILD_NUMBER}"
             }
         }
         stage('Push Docker Image') {
             steps {
-                // Push Docker image to registry
                 withCredentials([usernamePassword(credentialsId: 'docker-registry-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin mycompany.jfrog.io"
                     sh "docker push ${DOCKER_REGISTRY}:latest"
@@ -78,44 +76,38 @@ pipeline {
         }
         stage('Deploy to Staging') {
             steps {
-                // Deploy to staging (example: SSH to staging server and update Docker container)
-                sshagent(['staging-server-credentials']) { // Jenkins SSH credentials ID
+                sshagent(['staging-server-credentials']) {
                     sh """
-                        ssh ${STAGING_SERVER} 'docker pull ${DOCKER_REGISTRY}:latest && \
+                        ssh ${STAGING_SERVER} "docker pull ${DOCKER_REGISTRY}:latest && \
                         docker stop myapp || true && \
                         docker rm myapp || true && \
-                        docker run -d --name myapp -p 8080:8080 ${DOCKER_REGISTRY}:latest'
+                        docker run -d --name myapp -p 8080:8080 ${DOCKER_REGISTRY}:latest"
                     """
                 }
             }
         }
         stage('End-to-End Tests') {
             steps {
-                // Run E2E tests against staging environment
-                sh "${MAVEN_HOME}/bin/mvn test -Pe2e-test"
+                sh "\"${MAVEN_HOME}\\bin\\mvn\" test -Pe2e-test"
             }
             post {
                 always {
-                    // Archive E2E test results
                     junit '**/target/e2e-reports/*.xml'
                 }
             }
         }
         stage('Deploy to Production') {
             when {
-                // Only deploy to production on main branch
                 branch 'main'
             }
             steps {
-                // Manual approval before production deployment
                 input message: 'Approve deployment to production?', ok: 'Deploy'
-                // Deploy to production
-                sshagent(['prod-server-credentials']) { // Jenkins SSH credentials ID
+                sshagent(['prod-server-credentials']) {
                     sh """
-                        ssh ${PRODUCTION_SERVER} 'docker pull ${DOCKER_REGISTRY}:latest && \
+                        ssh ${PRODUCTION_SERVER} "docker pull ${DOCKER_REGISTRY}:latest && \
                         docker stop myapp || true && \
                         docker rm myapp || true && \
-                        docker run -d --name myapp -p 8080:8080 ${DOCKER_REGISTRY}:latest'
+                        docker run -d --name myapp -p 8080:8080 ${DOCKER_REGISTRY}:latest"
                     """
                 }
             }
@@ -123,17 +115,14 @@ pipeline {
     }
     post {
         always {
-            // Clean up workspace
             cleanWs()
         }
         success {
-            // Notify on success
             mail to: 'dev-team@mycompany.com',
                  subject: "Build ${env.BUILD_NUMBER} Succeeded",
                  body: "The CI/CD pipeline for ${env.JOB_NAME} build ${env.BUILD_NUMBER} completed successfully."
         }
         failure {
-            // Notify on failure
             mail to: 'dev-team@mycompany.com',
                  subject: "Build ${env.BUILD_NUMBER} Failed",
                  body: "The CI/CD pipeline for ${env.JOB_NAME} build ${env.BUILD_NUMBER} failed. Check Jenkins for details."
